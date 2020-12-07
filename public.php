@@ -31,6 +31,11 @@
  *
  */
 
+use OC\WellKnown\Exceptions\NotManagedWellKnownRequestException;
+use OC\WellKnown\Exceptions\WellKnownRequestException;
+use OC\WellKnown\WellKnownManager;
+use OCP\WellKnown\IWellKnownManager;
+
 require_once __DIR__ . '/lib/versioncheck.php';
 
 try {
@@ -55,7 +60,24 @@ try {
 		$pathInfo = trim($pathInfo, '/');
 		list($service) = explode('/', $pathInfo);
 	}
-	$file = \OC::$server->getConfig()->getAppValue('core', 'public_' . strip_tags($service));
+
+	// Managing some .well-known request
+	OC_App::loadApps();
+	try {
+		/** @var IWellKnownManager $manager */
+		$manager = \OC::$server->query(WellKnownManager::class);
+		$wellKnown = $manager->manageRequest($request);
+		header('Content-type: application/json');
+		echo json_encode($wellKnown);
+		exit;
+	} catch (NotManagedWellKnownRequestException $e) {
+	} catch (WellKnownRequestException $e) {
+		http_response_code($e->getErrorCode());
+		exit;
+	}
+
+	$file = \OC::$server->getConfig()
+						->getAppValue('core', 'public_' . strip_tags($service));
 	if ($file === '') {
 		http_response_code(404);
 		exit;
@@ -66,14 +88,14 @@ try {
 
 	// Load all required applications
 	\OC::$REQUESTEDAPP = $app;
-	OC_App::loadApps(['authentication']);
-	OC_App::loadApps(['filesystem', 'logging']);
+//	OC_App::loadApps(['authentication']); // should not be needed anymore
+//	OC_App::loadApps(['filesystem', 'logging']);
 
 	if (!\OC::$server->getAppManager()->isInstalled($app)) {
 		http_response_code(404);
 		exit;
 	}
-	OC_App::loadApp($app);
+//	OC_App::loadApp($app);
 	OC_User::setIncognitoMode(true);
 
 	$baseuri = OC::$WEBROOT . '/public.php/' . $service . '/';
